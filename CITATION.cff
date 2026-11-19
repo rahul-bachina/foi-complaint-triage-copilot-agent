@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "FOI and Complaint Triage AI Agent for UK Public Sector"
+abstract: "Decision-support agent that helps UK public sector staff triage FOI, EIR, SAR and complaint submissions. Autonomy A1: a person approves every output. The agent does not send, reject, or decide."
+type: software
+authors:
+  - family-names: Bachina
+    given-names: Rahul
+    website: "https://github.com/rahul-bachina"
+repository-code: "https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent"
+url: "https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent"
+license: MIT
+version: "1.0.0"
+date-released: "2026-11-19"
+keywords:
+  - freedom of information
+  - complaints
+  - Copilot Studio
+  - Microsoft Foundry
+  - UK GDPR
+  - public sector

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FOI and Complaint Triage AI Agent for UK Public Sector (Copilot Studio and Microsoft Foundry)</title>
+  <meta name="description" content="FOI and complaint triage for UK public sector staff on Copilot Studio and Microsoft Foundry. An officer approves every output. The agent never sends or rejects.">
+  <link rel="canonical" href="https://rahul-bachina.github.io/foi-complaint-triage-copilot-agent/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="FOI and Complaint Triage AI Agent for UK Public Sector (Copilot Studio and Microsoft Foundry)">
+  <meta property="og:description" content="FOI and complaint triage for UK public sector staff on Copilot Studio and Microsoft Foundry. An officer approves every output. The agent never sends or rejects.">
+  <meta property="og:url" content="https://rahul-bachina.github.io/foi-complaint-triage-copilot-agent/">
+  <meta property="og:image" content="https://rahul-bachina.github.io/foi-complaint-triage-copilot-agent/social-preview.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:locale" content="en_GB">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="FOI and Complaint Triage AI Agent for UK Public Sector (Copilot Studio and Microsoft Foundry)">
+  <meta name="twitter:description" content="FOI and complaint triage for UK public sector staff on Copilot Studio and Microsoft Foundry. An officer approves every output. The agent never sends or rejects.">
+  <meta name="twitter:image" content="https://rahul-bachina.github.io/foi-complaint-triage-copilot-agent/social-preview.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "FOI and Complaint Triage AI Agent for UK Public Sector",
+    "description": "FOI and complaint triage for UK public sector staff on Copilot Studio and Microsoft Foundry. An officer approves every output. The agent never sends or rejects.",
+    "codeRepository": "https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent",
+    "url": "https://rahul-bachina.github.io/foi-complaint-triage-copilot-agent/",
+    "programmingLanguage": {
+      "@type": "ComputerLanguage",
+      "name": "Python"
+    },
+    "runtimePlatform": "Copilot Studio, Microsoft Foundry",
+    "license": "https://opensource.org/licenses/MIT",
+    "author": {
+      "@type": "Person",
+      "name": "Rahul Bachina",
+      "jobTitle": "UK Solution Architect",
+      "url": "https://github.com/rahul-bachina"
+    },
+    "keywords": "FOI, EIR, subject access request, complaints, Copilot Studio, Microsoft Foundry, UK GDPR, public sector, AI governance"
+  }
+  </script>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #142033; background: #f4f7fb; line-height: 1.5; }
+    header { background: #0b1f33; color: #f4f7fb; padding: 2.5rem 1.25rem 2rem; }
+    main, header, footer { max-width: 46rem; margin-left: auto; margin-right: auto; }
+    header { max-width: none; }
+    header .wrap, footer .wrap { max-width: 46rem; margin: 0 auto; }
+    h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 0.75rem; font-weight: 650; }
+    h2 { font-size: 1.2rem; margin: 2rem 0 0.5rem; }
+    p, li { font-size: 1.05rem; }
+    a { color: #0f5c56; }
+    header a { color: #d5efe9; }
+    .lede { font-size: 1.15rem; max-width: 40rem; }
+    .panel { background: #fff; border: 1px solid #d5deea; border-radius: 8px; padding: 0.25rem 1.25rem 1rem; margin-top: 1.25rem; }
+    figure { margin: 1rem 0; }
+    img { max-width: 100%; height: auto; border: 1px solid #d5deea; background: #fff; }
+    figcaption { font-size: 0.9rem; color: #3d4c63; margin-top: 0.4rem; }
+    footer { padding: 1rem 1.25rem 2.5rem; color: #3d4c63; }
+    code { font-size: 0.95em; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>FOI and Complaint Triage AI Agent for UK Public Sector (Copilot Studio and Microsoft Foundry)</h1>
+      <p class="lede">FOI and complaint triage for UK public sector staff on Copilot Studio and Microsoft Foundry. An officer approves every output. The agent never sends or rejects.</p>
+    </div>
+  </header>
+  <main>
+    <div class="panel">
+      <h2>What it is</h2>
+      <p>A member of staff pastes one FOI request, EIR request, subject access request, or complaint. The agent returns a structured brief: the asks, a suggested type, a suggested team, any urgency flag, a cost-limit note, and a draft letter. Autonomy is A1. A person approves every output. Sample data in the repository is synthetic.</p>
+      <p>It does not decide, send, reject, or write to a case system. It does not give legal advice.</p>
+      <p>The full note, with the statutory quotations and the evaluation table, is the <a href="https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/README.md">README</a>. The control for what the agent may do is the <a href="https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/agent-manifest.yaml">permissions manifest</a>.</p>
+    </div>
+    <div class="panel">
+      <h2>Who it is for</h2>
+      <p>FOI officers, complaints managers, data protection officers, and solution architects in UK local authorities, government departments, NHS bodies, police forces, schools and universities, and arm's-length bodies.</p>
+    </div>
+    <div class="panel">
+      <h2>How a case moves</h2>
+      <ol>
+        <li>Staff paste one submission.</li>
+        <li>The agent reads that text only.</li>
+        <li>Microsoft Foundry, or mock mode, returns JSON.</li>
+        <li>An FOI or complaints officer accepts or corrects the classification, the routing, the cost-limit note, and any letter.</li>
+        <li>A safeguarding flag is reviewed by that officer or the safeguarding lead.</li>
+        <li>Staff record the case and send any letter themselves.</li>
+      </ol>
+      <figure>
+        <img src="architecture_diagram.png" width="1200" alt="Architecture diagram. Public sector staff submit free text to the triage agent, which extracts asks, classifies the type, flags urgency and suggests routing. Microsoft Foundry or mock mode returns structured JSON. Staff review the brief and decide.">
+        <figcaption>Staff decide. The agent assists.</figcaption>
+      </figure>
+    </div>
+    <div class="panel">
+      <h2>Try the code</h2>
+      <p>Clone <a href="https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent">rahul-bachina/foi-complaint-triage-copilot-agent</a>, install <code>requirements.txt</code>, and run <code>python src/triage_agent.py --mock --input examples/sample_request.txt</code>. There is no Copilot Studio package to import. The build guides are in the repository.</p>
+      <p>Part of the <a href="https://github.com/rahul-bachina/copilot-agent-experiments">Copilot Agent Experiments</a> catalogue. Written by <a href="https://github.com/rahul-bachina">Rahul Bachina</a>, UK Solution Architect.</p>
+    </div>
+  </main>
+  <footer>
+    <div class="wrap">
+      <p>MIT licence. This page is not a data protection impact assessment, an ATRS record, or legal advice.</p>
+    </div>
+  </footer>
+</body>
+</html>

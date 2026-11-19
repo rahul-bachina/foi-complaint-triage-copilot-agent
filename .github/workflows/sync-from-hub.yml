@@ -1,0 +1,52 @@
+name: Sync from hub
+
+on:
+  schedule:
+    # Weekly, Monday 07:00 UTC.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Clone the public hub
+        run: git clone --depth 1 https://github.com/rahul-bachina/copilot-agent-experiments.git /tmp/hub
+
+      - name: Install dependencies for the diagram redraw
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Copy experiment 01 and rewrite standalone paths
+        env:
+          MPLBACKEND: Agg
+        run: python scripts/sync_from_hub.py /tmp/hub --regenerate-diagram
+
+      - name: Open a pull request if anything changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: sync/hub-experiment-01
+          base: main
+          delete-branch: true
+          commit-message: "Sync FOI complaint triage from the experiments hub"
+          title: "Sync FOI complaint triage from the experiments hub"
+          body: |
+            Automated sync of `experiments/01-foi-complaint-triage/` from https://github.com/rahul-bachina/copilot-agent-experiments.
+
+            Files listed in `.sync-ignore` were left as they are. Hub-relative imports and the manifest schema path were rewritten for this repository. The architecture diagram was redrawn so the model host is labelled Microsoft Foundry.
+
+            The repository setting **Allow GitHub Actions to create and approve pull requests** must be on, and the workflow token needs write access, or this job cannot open the pull request.

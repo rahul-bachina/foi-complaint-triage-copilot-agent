@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Copilot Agent Experiments catalogue
+    url: https://github.com/rahul-bachina/copilot-agent-experiments
+    about: The hub this agent is published from.

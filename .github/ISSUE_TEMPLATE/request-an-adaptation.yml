@@ -1,0 +1,82 @@
+name: Request an adaptation for my organisation
+description: Ask Rahul Bachina to adapt this FOI and complaint triage agent for your organisation.
+title: "Adaptation request: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form if you want the FOI and complaint triage agent adapted for your organisation.
+
+        Do not include live requests, case files, personal data, special-category data, or secrets. Use a fictional example if you need to describe a submission.
+
+  - type: input
+    id: organisation
+    attributes:
+      label: Organisation
+      description: The public authority or regulated organisation.
+      placeholder: Example Borough Council
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sector
+    attributes:
+      label: Sector
+      options:
+        - Local authority
+        - Central government department or arm's-length body
+        - NHS
+        - Police
+        - School, college, or university
+        - Other public authority
+        - Regulated organisation that is not a public authority
+    validations:
+      required: true
+
+  - type: input
+    id: role
+    attributes:
+      label: Your role
+      description: For example FOI officer, complaints manager, data protection officer, solution architect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: need
+    attributes:
+      label: What should be adapted
+      description: Teams, case system, channels, and which decisions must stay with a person.
+      placeholder: We want the brief to land in our existing case queue. Officers must still approve classification, routing, and any letter.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stack
+    attributes:
+      label: What you already have
+      options:
+        - Copilot Studio
+        - Microsoft Foundry
+        - Both
+        - Neither yet
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: contact
+    attributes:
+      label: Contact
+      description: A way to reply that you are content to have on a GitHub issue. An email address will be public if you type it here.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have not included a live request, personal data, or a secret.
+          required: true
+        - label: I understand the published agent does not decide, send, or reject, and that a person must still approve.
+          required: true

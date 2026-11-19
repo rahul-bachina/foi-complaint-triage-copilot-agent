@@ -1,0 +1,1380 @@
+# FOI and Complaint Triage AI Agent for UK Public Sector
+
+This file concatenates the README and the key documents so a language model
+can read them in one fetch. The permissions manifest is `agent-manifest.yaml`.
+The output schema is `schema/triage_output.schema.json`. Evaluation data in
+`eval/synthetic_dataset.json` is synthetic. This file is not a substitute
+for the manifest when the two disagree.
+
+
+----- BEGIN README.md -----
+
+# FOI and Complaint Triage AI Agent for UK Public Sector (Copilot Studio and Microsoft Foundry)
+
+FOI and complaint triage for UK public sector staff on Copilot Studio and Microsoft Foundry. An officer approves every output. The agent never sends or rejects. It reads one submission pasted by a member of staff and returns a structured brief: the separate asks, a suggested type, a suggested team, any urgency or safeguarding flag, a cost-limit note, and a draft clarification letter. Every example in this repository is synthetic. This is decision support for staff. It is not a decision, and it is not legal advice.
+
+The permissions manifest (`agent-manifest.yaml`) wins if this page and the manifest disagree.
+
+## Who this is for
+
+Named roles, in UK public authorities and in regulated bodies that handle the same kind of intake:
+
+- FOI officers and information-rights officers
+- Complaints managers and complaint-handling leads
+- Data protection officers and information governance managers
+- Safeguarding leads, who need a flag from an officer, not an automated referral
+- Solution architects and Power Platform leads who are choosing how Copilot Studio and Microsoft Foundry should sit in an existing case process
+
+Sectors the pattern is written for: local authorities, ministerial and non-ministerial departments, NHS bodies, police forces, schools and universities that are public authorities, and arm's-length bodies. Environmental information requests also reach some utilities and other bodies covered by the Environmental Information Regulations 2004. A private regulated firm (financial services, telecoms, energy) can reuse the human-approval shape for complaint intake, but this repository does not implement the FCA Dispute Resolution rules, Ofcom or Ofgem complaint procedures, or an ombudsman scheme. Those rules have to be mapped before anyone relies on it.
+
+## The problem
+
+One email often mixes a complaint with a request for recorded information, environmental information, or the requester's own personal data. Staff have to split the asks, notice anything that looks urgent, judge whether the FOI cost limit may apply, and work out which team should take it. The statutory clock does not wait for that reading.
+
+The Information Commissioner's Office (ICO) says an AI-written request is not invalid merely because AI was used. From [Freedom of Information (FOI) and Artificial Intelligence](https://ico.org.uk/for-organisations/foi/freedom-of-information-foi-and-artificial-intelligence/), retrieved 19 November 2026:
+
+> Using AI to assist in writing a request is like using other kinds of technology.
+
+The same page says the authority must still respond unless the request fails section 8 of the Freedom of Information Act 2000, and that staff may ask for clarification when the wording is unclear. A long or template-like request is still a request.
+
+## What it does
+
+From one free-text submission, pasted by an authorised member of staff:
+
+- extracts each distinct ask, with a quote from the text
+- suggests a type: FOI, EIR, subject access request, complaint, or mixed, with a rationale and a confidence level
+- suggests a department and team
+- flags urgency and safeguarding, including when a person should look immediately
+- notes whether the request is likely to exceed the FOI cost limit
+- drafts a clarification letter, where it thinks one is needed, for a person to edit
+- records bulk or template signals as information only
+
+The runnable core is Python in `src/`. With credentials it calls a model deployment. Without credentials, `--mock` uses rule-based Python so the pipeline can be tried. Mock mode is not a measure of model quality.
+
+Two Copilot Studio harnesses can sit in front of that core. Both stop at the same approval points. Neither is an importable solution package.
+
+| Harness | Use it for | Where it is written |
+| --- | --- | --- |
+| Standard harness | The same intake every time: paste, triage, show the JSON, stop | [copilot-studio/README.md](copilot-studio/README.md) |
+| GitHub Copilot harness | Follow-up questions about that JSON | [docs/github-copilot-harness.md](docs/github-copilot-harness.md) and [skills/](skills/) |
+
+The GitHub Copilot harness is a Copilot Studio runtime. It is not the GitHub Copilot product. Read [docs/harness-comparison.md](docs/harness-comparison.md) before spending Copilot Credits. This repository does not quote a price.
+
+## What it does not do
+
+Autonomy in this catalogue is A0, A1, or A2. Definitions are in [docs/autonomy-levels.md](docs/autonomy-levels.md). This agent is **A1: a person approves every action**. `auto_actions_enabled` is false. Level A3 is not permitted.
+
+These are switched off in the manifest, not left to the prompt:
+
+- It does not approve, reject, or close a request.
+- It does not send email, letters, or any other message. A clarification letter is draft text.
+- It does not write to a case system, a database, or any other store.
+- It does not make the statutory decision, including exemptions, the cost limit, or a subject access response.
+- It does not auto-reject because of wording, because the text looks AI-generated, or because it uses a template.
+- It does not read case systems, HR records, finance systems, email, identity databases, or a requester's earlier requests.
+- It does not give legal advice.
+- It does not talk to the requester. The Customer Conversation harness is not used.
+
+High-risk actions in the manifest (`approve_reject`, `regulated_decision`, `production_record_change`, `external_send`, `spend_transact`) are all disabled.
+
+Some people use a tool or a template because of disability, language, or unfamiliarity with formal writing. Treating that as a reason to refuse would cut across the public sector equality duty. Section 149(1) of the Equality Act 2010, [legislation.gov.uk](https://www.legislation.gov.uk/ukpga/2010/15/section/149), says:
+
+> A public authority must, in the exercise of its functions, have due regard to the need to— (a) eliminate discrimination, harassment, victimisation and any other conduct that is prohibited by or under this Act; (b) advance equality of opportunity between persons who share a relevant protected characteristic and persons who do not share it; (c) foster good relations between persons who share a relevant protected characteristic and persons who do not share it.
+
+This repository does not discharge that duty. It refuses to build an automatic rejection on how the request is written. The authority still has the duty.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph intake [Intake]
+        Staff[Authorised member of staff]
+        Text[One pasted submission]
+        Staff --> Text
+    end
+    subgraph core [Triage core]
+        Agent[Python triage agent]
+        Mode{Microsoft Foundry or mock mode}
+        Text --> Agent --> Mode
+    end
+    subgraph brief [Structured brief]
+        Mode --> Class[Classification]
+        Mode --> Asks[Asks with quotes]
+        Mode --> Flags[Urgency and safeguarding]
+        Mode --> Route[Suggested team]
+        Mode --> Letter[Draft letter]
+    end
+    subgraph decision [Decision]
+        Class --> Officer[Officer reviews and decides]
+        Asks --> Officer
+        Flags --> Officer
+        Route --> Officer
+        Letter --> Officer
+    end
+```
+
+![Architecture diagram. Staff submit free text. The triage agent extracts asks, classifies the type, flags urgency and suggests routing. It calls Microsoft Foundry or uses mock mode. Staff review the brief and decide.](docs/architecture_diagram.png)
+
+The diagram is generated by `docs/generate_diagram.py`. Copilot Studio, with a Power Automate flow, is an alternative interface to the same core. See [foundry/README.md](foundry/README.md).
+
+## Human approval
+
+```mermaid
+flowchart TD
+    A["1. Staff paste one submission"] --> B["2. Agent reads that text and its instructions"]
+    B --> C["3. Microsoft Foundry, or mock mode, returns JSON"]
+    C --> D["4. Draft brief is shown"]
+    D --> E["5. FOI or complaints officer accepts or corrects the classification"]
+    E --> F["5. Same officer accepts or corrects routing, the cost-limit note, and any letter"]
+    F --> G{"Safeguarding flag?"}
+    G -->|Yes| H["5. Officer or safeguarding lead reviews the flag"]
+    G -->|No| I["6. Staff record the case and send any letter themselves"]
+    H --> I
+```
+
+| Before anyone relies on it | Who | In the manifest |
+| --- | --- | --- |
+| Accept the classification | FOI or complaints officer | Mandatory |
+| Act on the routing suggestion | FOI or complaints officer | Mandatory |
+| Apply the cost-limit assessment | FOI or complaints officer | Mandatory |
+| Send the clarification letter | FOI or complaints officer | Mandatory. The agent only drafts it |
+| Escalate a safeguarding flag | FOI or complaints officer, or the safeguarding lead | Mandatory. The one-hour figure in the manifest is an assumption |
+
+Viewing the draft, or running the triage again, has no external effect and does not need a separate approval. Anything after step 6 happens in the systems the organisation already uses. The agent has no connector for that.
+
+## Governance
+
+Least privilege is the manifest, not a slogan. A run may read the submission a member of staff pastes, and the static instructions. It may not read case history or the requester's other records. Writes are disabled. Sends are disabled. The agent does not persist the text. What staff then file is the organisation's retention schedule, which this repository does not set.
+
+Contacts in the manifest (`foi-triage-support@example.gov.uk` and the other `example.gov.uk` addresses) are placeholders.
+
+### UK GDPR and the Data Protection Act 2018
+
+The manifest records the basis a public-authority controller would be expected to consider. It is not a completed legitimate-interest assessment, and it is not a data protection impact assessment.
+
+Article 6(1)(c) of the UK GDPR, as revised on [legislation.gov.uk](https://www.legislation.gov.uk/eur/2016/679/article/6) and retrieved 19 November 2026:
+
+> processing is necessary for compliance with a legal obligation to which the controller is subject;
+
+Article 6(1)(e), same page, after the Data (Use and Access) Act 2025 amendments shown there:
+
+> processing is necessary for the performance of a task of the controller carried out in the public interest or a task carried out in the exercise of official authority vested in the controller;
+
+The manifest uses Article 6(1)(e) as the primary basis and Article 6(1)(c) as the secondary basis, because answering FOI, EIR, and subject access requests is a statutory duty. Article 6(3) on the same page says the basis for point (e) must be laid down by domestic law or relevant international law. The domestic law for this pattern is the legislation quoted below, together with the Data Protection Act 2018. The controller confirms that before go-live.
+
+A submission may contain special-category data (health, political opinions, and so on). Article 9(2)(g) of the UK GDPR, as revised on [legislation.gov.uk](https://www.legislation.gov.uk/eur/2016/679/article/9) and retrieved 19 November 2026:
+
+> processing is necessary for reasons of substantial public interest, on the basis of domestic law, or relevant international law, which shall be proportionate to the aim pursued and provide for suitable and specific measures to safeguard the fundamental rights and the interests of the data subject;
+
+The legislation.gov.uk page shows an editorial ellipsis between "pursued" and "and", where the [Data Protection (Fundamental Rights and Freedoms) (Amendment) Regulations 2023](https://www.legislation.gov.uk/uksi/2023/1417/contents) omitted earlier words. The quotation above is the words that remain, without that editorial mark.
+
+The manifest points at Data Protection Act 2018, Schedule 1, Part 2, paragraph 6 (statutory and government purposes). Paragraph 6(1) and (2), retrieved the same day from [legislation.gov.uk](https://www.legislation.gov.uk/ukpga/2018/12/schedule/1/paragraph/6):
+
+> (1) This condition is met if the processing— (a) is necessary for a purpose listed in sub-paragraph (2), and (b) is necessary for reasons of substantial public interest. (2) Those purposes are— (a) the exercise of a function conferred on a person by an enactment or rule of law; (b) the exercise of a function of the Crown, a Minister of the Crown or a government department.
+
+Safeguards named in the manifest: classification only, no decision taken on that data, human review, and no persistence beyond the session. Article 9(5) says [section 10 of the 2018 Act](https://www.legislation.gov.uk/ukpga/2018/12/section/10) makes provision about when the domestic-law basis in Article 9(2)(g) is met. Confirm the condition with your data protection officer. Production inference is assumed to run in UK South or UK West. That assumption is for the deploying organisation to confirm.
+
+The right of access itself is [Article 15 UK GDPR](https://www.legislation.gov.uk/eur/2016/679/article/15). This agent does not fulfil a subject access request. Staff do.
+
+### FOI, EIR, and the cost limit
+
+Freedom of Information Act 2000, section 1(1), [legislation.gov.uk](https://www.legislation.gov.uk/ukpga/2000/36/section/1):
+
+> Any person making a request for information to a public authority is entitled— (a) to be informed in writing by the public authority whether it holds information of the description specified in the request, and (b) if that is the case, to have that information communicated to him.
+
+Section 8(1), [legislation.gov.uk](https://www.legislation.gov.uk/ukpga/2000/36/section/8), is the validity test the ICO points to for AI-written requests:
+
+> In this Act any reference to a “request for information” is a reference to such a request which— (a) is in writing, (b) states the name of the applicant and an address for correspondence, and (c) describes the information requested.
+
+Section 10(1), [legislation.gov.uk](https://www.legislation.gov.uk/ukpga/2000/36/section/10):
+
+> Subject to subsections (2) and (3), a public authority must comply with section 1(1) promptly and in any event not later than the twentieth working day following the date of receipt.
+
+Section 12(1), [legislation.gov.uk](https://www.legislation.gov.uk/ukpga/2000/36/section/12):
+
+> Section 1(1) does not oblige a public authority to comply with a request for information if the authority estimates that the cost of complying with the request would exceed the appropriate limit.
+
+The appropriate limit is set by the Freedom of Information and Data Protection (Appropriate Limit and Fees) Regulations 2004. Regulation 3(2) and (3), [legislation.gov.uk](https://www.legislation.gov.uk/uksi/2004/3244/regulation/3):
+
+> (2) In the case of a public authority which is listed in Part I of Schedule 1 to the 2000 Act, the appropriate limit is £600. (3) In the case of any other public authority, the appropriate limit is £450.
+
+Regulation 4(4), [legislation.gov.uk](https://www.legislation.gov.uk/uksi/2004/3244/regulation/4), estimates staff time at £25 per person per hour, and only for determining whether the information is held, locating it, retrieving it, and extracting it. The agent's cost note is a prompt for that estimate. It is not the estimate.
+
+Section 16(1), [legislation.gov.uk](https://www.legislation.gov.uk/ukpga/2000/36/section/16):
+
+> It shall be the duty of a public authority to provide advice and assistance, so far as it would be reasonable to expect the authority to do so, to persons who propose to make, or have made, requests for information to it.
+
+Section 16(2) treats conformity with the section 45 code as compliance with that duty in that case. The current code is the [Freedom of Information Code of Practice](https://www.gov.uk/government/publications/freedom-of-information-code-of-practice) (Cabinet Office). The draft clarification letter is there so an officer can meet that duty. The agent does not send it.
+
+Environmental Information Regulations 2004, regulation 5(1) and (2), [legislation.gov.uk](https://www.legislation.gov.uk/uksi/2004/3391/regulation/5):
+
+> (1) Subject to paragraph (3) and in accordance with paragraphs (2), (4), (5) and (6) and the remaining provisions of this Part and Part 3 of these Regulations, a public authority that holds environmental information shall make it available on request. (2) Information shall be made available under paragraph (1) as soon as possible and no later than 20 working days after the date of receipt of the request.
+
+Regulation 9(1), [legislation.gov.uk](https://www.legislation.gov.uk/uksi/2004/3391/regulation/9):
+
+> A public authority shall provide advice and assistance, so far as it would be reasonable to expect the authority to do so, to applicants and prospective applicants.
+
+### Regulator guidance
+
+- ICO, [Freedom of Information (FOI) and Artificial Intelligence](https://ico.org.uk/for-organisations/foi/freedom-of-information-foi-and-artificial-intelligence/). AI assistance does not by itself make a request invalid. Inaccuracies in an AI-drafted request do not by themselves make it invalid. Clarify under section 1(3) when the description is unclear, and give advice and assistance under section 16.
+- ICO, [Recognising a request made under the Freedom of Information Act (section 8)](https://ico.org.uk/for-organisations/foi/freedom-of-information-and-environmental-information-regulations/recognising-a-request-made-under-the-freedom-of-information-act-section-8/).
+- ICO, [Section 16 — Advice and assistance](https://ico.org.uk/for-organisations/foi/freedom-of-information-and-environmental-information-regulations/section-16-advice-and-assistance/).
+- ICO, [Guidance on AI and data protection](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/artificial-intelligence/guidance-on-ai-and-data-protection/), and [Public task](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/lawful-basis/a-guide-to-lawful-basis/public-task/) as the ICO's guide to Article 6(1)(e).
+- Cabinet Office, [Freedom of Information Code of Practice](https://www.gov.uk/government/publications/freedom-of-information-code-of-practice), under section 45.
+- Complaints about councils and care providers in England are for the authority's own procedure and, after that, the [Local Government and Social Care Ombudsman](https://www.lgo.org.uk/). Complaints about UK government departments and the NHS in England are for the [Parliamentary and Health Service Ombudsman](https://www.ombudsman.org.uk/). NHS and social-care complaint handling in England is also under the [Local Authority Social Services and National Health Service Complaints (England) Regulations 2009](https://www.legislation.gov.uk/uksi/2009/309/contents). This agent does not decide those complaints and does not draft an ombudsman response.
+
+### Algorithmic Transparency Recording Standard
+
+The standard and the published records are collected at the [Algorithmic Transparency Recording Standard hub](https://www.gov.uk/government/collections/algorithmic-transparency-recording-standard-hub). How to complete a record: [Guidance for organisations using the Algorithmic Transparency Recording Standard](https://www.gov.uk/government/publications/guidance-for-organisations-using-the-algorithmic-transparency-recording-standard).
+
+The [mandatory scope and exemptions policy](https://www.gov.uk/government/publications/algorithmic-transparency-recording-standard-mandatory-scope-and-exemptions-policy/algorithmic-transparency-recording-standard-atrs-mandatory-scope-and-exemptions-policy), retrieved 19 November 2026, says the mandatory requirement currently applies to central government: ministerial departments, non-ministerial departments, and arm's-length bodies that provide public or frontline services or routinely interact with the public. On which tools:
+
+> The mandatory requirement to publish an ATRS record applies to algorithmic tools that either: 1. have a significant influence on a decision-making process with public effect, or 2. directly interact with the general public.
+
+> ‘Significant influence’ includes where an algorithmic tool meaningfully assists, supplements, or fully automates a decision-making process. This could be a tool that plays a triaging or scoring function within a wider process.
+
+A triage assistant can fall inside that sentence once it is in beta, pilot, or production and it is influencing operational decisions. This repository is a starter, not a deployed tool, and it does not file a record. The organisation decides, completes the template, and sends it. The manifest's `atrs_mapping` section only points manifest fields at ATRS fields. Local authorities are outside that mandatory central-government list; voluntary publication is still described in the policy.
+
+### Product name
+
+The live model host is Microsoft Foundry. That product was formerly called Azure AI Foundry. Source: [What is Microsoft Foundry?](https://learn.microsoft.com/en-us/azure/foundry/what-is-foundry), which lists the previous brand as Azure AI Studio / Azure AI Foundry.
+
+## Quick start
+
+Python 3.10 or newer. No credentials are required for mock mode. No key is stored in the repository.
+
+```bash
+git clone https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent.git
+cd foi-complaint-triage-copilot-agent
+python -m pip install -r requirements.txt
+python -m pytest tests/ -v --tb=short
+python src/triage_agent.py --mock --input examples/sample_request.txt
+python eval/evaluate.py
+```
+
+`python -m src.triage_agent --mock --input examples/sample_request.txt` is the same entry point, imported as a package.
+
+### Microsoft Foundry
+
+```bash
+export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com"
+export AZURE_OPENAI_API_KEY="your-key"
+export AZURE_OPENAI_DEPLOYMENT="gpt-4o"
+python src/triage_agent.py --input examples/sample_request.txt
+```
+
+Those values are placeholders. See [foundry/README.md](foundry/README.md). Do not point this at a live request until the region, identity, and logging assumptions in the manifest have been confirmed.
+
+### Copilot Studio
+
+There is nothing to import. Copilot Studio agents are not reliably exported as a solution zip.
+
+1. Standard harness: follow [copilot-studio/README.md](copilot-studio/README.md), [copilot-studio/system-prompt.md](copilot-studio/system-prompt.md), and [copilot-studio/power-automate-flow.md](copilot-studio/power-automate-flow.md). Do not upload the files in `skills/` onto that agent.
+2. GitHub Copilot harness: follow [docs/github-copilot-harness.md](docs/github-copilot-harness.md). Building and testing it consumes Copilot Credits from the start of building, on the Microsoft page cited in the harness comparison (retrieved 24 October 2026). Confirm the current price in the tenant. This repository does not quote one.
+
+## Evaluation results
+
+Ran on 19 November 2026 in mock mode against `eval/synthetic_dataset.json` (12 synthetic cases). The command was `python eval/evaluate.py`.
+
+| Result | Value |
+| --- | --- |
+| Cases processed | 12 of 12 |
+| Errors | 0 |
+| Agreement with the expected fields | 100.0% |
+| Classification | 12 of 12 asserted cases |
+| Flags | 10 of 10 asserted cases |
+| Routing | 8 of 8 asserted cases |
+| Cost-limit assessment | 6 of 6 asserted cases |
+| Bulk-submission signals | 2 of 2 asserted cases |
+
+Not every case asserts every field, which is why the field rows are not all out of 12. The mock classifier is rule-based and was tuned to this set. A pass means the pipeline returns schema-shaped JSON and the rules match the labels the dataset already expects. It says nothing about how a model would classify a new request. A live-model evaluation against Microsoft Foundry has not been run. "What I learned" in the upstream notes is still empty for that reason.
+
+The dataset file states that all of its data is synthetic. There are no real requests and no real people.
+
+## Limitations
+
+- Mock mode is keyword matching. It will not behave like a model, and the 100% figure above is not an accuracy claim.
+- The agent does not learn from staff decisions. That is deliberate.
+- Classification assumes the UK FOI, EIR, and data-protection framework. It does not apply exemptions.
+- It is not a legal tool. The quotations above are there so a buyer can see the source. They are not advice on a particular request.
+- Several deployment choices are marked as assumptions in the manifest: UK region, retention, a one-hour safeguarding review, Application Insights, the escalation contacts, and the reviewing board.
+- The security guide's notes on Dynamic Permissions, Dynamic Agent Risk, and Dynamic Conditional Access were unverified when written. Do not rely on them until you confirm availability.
+- Copilot Credit prices, and which licence includes which harness, were not copied beyond the sentences on the pages opened on 24 October 2026. The full standard-harness licensing article was not opened. See [docs/harness-comparison.md](docs/harness-comparison.md).
+- The upstream experiment README cites a Sky News report of 20 October 2026 for percentage increases in council and DWP complaints. This page does not repeat those figures. An automated fetch of that URL was refused (HTTP 403), so they are not treated as verified here.
+
+## FAQ
+
+### Does this disclose information or refuse a request?
+
+No. Section 1 of the Freedom of Information Act 2000 is a duty on the public authority. The agent drafts a brief. An officer decides whether information is held, whether an exemption applies, and what is sent.
+
+### Are AI-written requests treated as invalid?
+
+No. The ICO's position, quoted above, is that using AI is like using other technology. The validity test is section 8. Bulk or template signals in the JSON are information only and must not be used as a reason to reject.
+
+### Can I import a Copilot Studio solution?
+
+No. `copilot-studio/` is a build guide. You recreate the topics and the flow in your tenant. Skills in `skills/` belong to the GitHub Copilot harness, not the standard harness, and an agent cannot be moved from one harness to the other.
+
+### What did the evaluation actually prove?
+
+That mock mode processes 12 synthetic cases and agrees with the labels in that file. It did not call a model. A buyer should not cite 100% as model accuracy.
+
+### What personal data does a run touch?
+
+The text the officer pastes, which may contain names, contact details, and special-category data, plus the static instructions. The agent does not store it and does not look the requester up. Retention of the case the officer then files is the organisation's schedule.
+
+### What is autonomy A1, in practice?
+
+The agent can suggest. It cannot act. Five approvals are mandatory: classification, routing, cost limit, sending a letter, and escalating a safeguarding flag. A0 would be analysis with no suggested action at all. A2 would allow low-risk actions without approval. A3, fully autonomous, is out of scope. This build is A1.
+
+### Where should the model run?
+
+The manifest says UK South or UK West for production. Confirm the region, the retention of prompts, and prompt shields in your tenant before a real submission is processed. Mock mode needs no region because it never leaves the machine.
+
+### Is this a DPIA, an ATRS record, or a legal opinion?
+
+No. It is a starter with a manifest, a risk note, and citations. Your data protection officer owns the DPIA. Your organisation owns any ATRS record. Counsel owns the legal position on a live request.
+
+## Part of the Copilot Agent Experiments catalogue
+
+This repository is experiment 01 published on its own, so a buyer can find it without cloning the whole catalogue.
+
+- Catalogue source: https://github.com/rahul-bachina/copilot-agent-experiments
+- Catalogue site: https://rahul-bachina.github.io/copilot-agent-experiments/
+- Experiment folder in the hub: https://github.com/rahul-bachina/copilot-agent-experiments/tree/main/experiments/01-foi-complaint-triage
+
+The hub copy of the experiment README, with paths adjusted for this repository, is [UPSTREAM.md](UPSTREAM.md). The catalogue page snapshot is [docs/catalogue-page.md](docs/catalogue-page.md).
+
+## Work with me
+
+Rahul Bachina is a UK Solution Architect covering Power Platform, Copilot Studio, Microsoft Foundry, Azure AI, and GitHub Copilot. He can adapt this agent to your organisation's case system, teams, and approval route.
+
+Contact via GitHub: https://github.com/rahul-bachina
+
+**LinkedIn:** TODO: add Rahul Bachina's LinkedIn URL here. Do not invent one.
+
+To ask for that adaptation, open a [request an adaptation for my organisation](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/issues/new?template=request-an-adaptation.yml). Do not include live requests or personal data.
+
+## Maintenance
+
+`.github/workflows/sync-from-hub.yml` runs every Monday at 07:00 UTC, and whenever someone starts it by hand. It clones the public hub over HTTPS, copies `experiments/01-foi-complaint-triage/` onto the matching paths in this repository, refreshes the shared manifest schema and the catalogue page, rewrites hub-relative imports, and opens a pull request with [peter-evans/create-pull-request](https://github.com/peter-evans/create-pull-request) using `GITHUB_TOKEN` only if something changed.
+
+It does not overwrite the standalone files listed in [.sync-ignore](.sync-ignore). That list includes this README, `llms.txt`, `llms-full.txt`, `CITATION.cff`, `SECURITY.md`, `CONTRIBUTING.md`, `.github/`, `site/`, `scripts/`, and `foundry/`.
+
+For the sync workflow to open pull requests, the repository setting **Allow GitHub Actions to create and approve pull requests** must be on (Settings, Actions, General). The workflow sets `contents: write` and `pull-requests: write`. If the repository's default workflow token is restricted to read-only, change Workflow permissions to read and write as well, or the job cannot push the sync branch.
+
+Review every sync pull request. A hub change that enables a send or a write should fail `scripts/validate_schemas.py` until someone deals with it deliberately.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). Copyright (c) 2026 Rahul Bachina.
+
+## Files a reviewer usually opens
+
+| File | What it is |
+| --- | --- |
+| [agent-manifest.yaml](agent-manifest.yaml) | Permissions, lawful basis, approvals, risks, kill switch |
+| [docs/security-and-permissions.md](docs/security-and-permissions.md) | The same manifest, written for governance readers |
+| [schema/triage_output.schema.json](schema/triage_output.schema.json) | Shape of the JSON brief |
+| [schemas/agent-manifest.schema.json](schemas/agent-manifest.schema.json) | Schema the manifest is validated against |
+| [eval/synthetic_dataset.json](eval/synthetic_dataset.json) | 12 synthetic cases |
+| [llms.txt](llms.txt) | Short map for language models |
+
+----- END README.md -----
+
+
+----- BEGIN docs/security-and-permissions.md -----
+
+# Security and Permissions Guide
+
+**FOI Complaint Triage Agent — Experiment 01**
+
+This document explains the agent's permissions manifest (`agent-manifest.yaml`) for governance, information security, and data protection audiences. It maps each section to relevant Microsoft security controls and explains how the agent is governed.
+
+> **Related documentation:**
+> - [`agent-manifest.yaml`](../agent-manifest.yaml) — Machine-readable permissions manifest
+> - [`README.md`](../README.md) — Technical architecture and usage
+> - [Algorithmic Transparency Recording Standard](https://www.gov.uk/government/collections/algorithmic-transparency-recording-standard-hub)
+
+---
+
+## Contents
+
+1. [Executive Summary](#executive-summary)
+2. [Agent Identity and Purpose](#agent-identity-and-purpose)
+3. [Autonomy Level](#autonomy-level)
+4. [Data Access Controls](#data-access-controls)
+5. [Tools and Actions](#tools-and-actions)
+6. [Human Approval Points](#human-approval-points)
+7. [UK GDPR Compliance](#uk-gdpr-compliance)
+8. [Prompt Injection Handling](#prompt-injection-handling)
+9. [Risk Assessment](#risk-assessment)
+10. [Logging and Audit](#logging-and-audit)
+11. [Kill Switch](#kill-switch)
+12. [Review Schedule](#review-schedule)
+13. [Microsoft Control Mapping](#microsoft-control-mapping)
+
+---
+
+## Executive Summary
+
+The FOI Complaint Triage Agent assists UK public sector staff in analysing Freedom of Information requests, complaints, and related submissions. It operates at **Autonomy Level A1**: the agent provides analysis and recommendations, but **humans approve everything**. The agent never sends communications, writes to external systems, or makes decisions autonomously.
+
+**Key governance points:**
+
+| Aspect | Summary |
+|--------|---------|
+| **Autonomy** | A1 — Human approves all actions |
+| **Data access** | Read submission text only; no access to case systems, HR, or requester history |
+| **Writes/Sends** | Disabled — agent cannot write to systems or send communications |
+| **Personal data** | May process; transient only; UK GDPR Article 6(1)(e) public task |
+| **Special category data** | May encounter; Article 9(2)(g) substantial public interest |
+| **Human review** | Mandatory for all classifications, routing, and escalations |
+| **Kill switch** | Multiple methods; immediate effect |
+| **Review cycle** | 6 months |
+
+---
+
+## Agent Identity and Purpose
+
+**Manifest section:** `agent`
+
+| Field | Value |
+|-------|-------|
+| ID | `exp-01-foi-triage` |
+| Name | FOI Complaint Triage Agent |
+| Version | 1.0.0 |
+| Owner | Information Rights Team |
+
+**Purpose:** The agent takes free-text FOI/EIR/SAR/complaint submissions and produces structured triage output including:
+- Classification (FOI, EIR, SAR, complaint, mixed)
+- Extracted questions with source quotes
+- Routing suggestions
+- Safeguarding flags
+- Cost limit assessment
+- Draft clarification letters (for human review and editing)
+
+The agent is a **decision support tool**, not a decision-making system.
+
+---
+
+## Autonomy Level
+
+**Manifest section:** `autonomy`
+
+This agent operates at **Autonomy Level A1: Human Approves Everything**.
+
+### What this means
+
+| The agent CAN | The agent CANNOT |
+|---------------|------------------|
+| Analyse submission text | Send emails or messages |
+| Classify request types | Write to databases or case systems |
+| Flag safeguarding concerns | Approve or reject requests |
+| Suggest routing | Make final decisions |
+| Draft clarification letters | Auto-reject based on content or origin |
+| Detect bulk submission signals | Take any autonomous action |
+
+### Explicit constraints
+
+From the manifest:
+- Agent NEVER sends emails, messages, or any external communications
+- Agent NEVER writes to databases, case management systems, or external storage
+- Agent NEVER approves, rejects, or closes requests
+- Agent NEVER makes final decisions — humans always decide
+- Agent NEVER auto-rejects requests based on content, origin, or perceived AI generation
+
+---
+
+## Data Access Controls
+
+**Manifest section:** `data_access`
+
+### Data the agent MAY read
+
+| Resource | Scope | Justification |
+|----------|-------|---------------|
+| Submission text | Single submission at a time, as provided by staff | Core function: analyse text to produce triage output |
+| System prompt and configuration | Static configuration files | Required for agent operation |
+
+Submission text may contain:
+- Requester names and contact details
+- Subject matter of requests
+- Personal data (if included in submission)
+- Special category data (health, political opinions in complaints)
+
+**Retention:** Transient processing only — the agent does not persist submission data.
+
+### Data the agent must NEVER access
+
+| Resource | Reason |
+|----------|--------|
+| Case management systems | Agent provides analysis only; staff access systems directly |
+| HR records | Not required for triage function |
+| Financial systems | Not required for triage function |
+| Email systems | Agent does not send communications |
+| Requester identity databases | Triage based on content, not identity |
+| Previous request history by requester | Each request assessed on own merits; no profiling |
+
+### Microsoft controls
+
+| Control | Purpose |
+|---------|---------|
+| **Microsoft Entra Agent ID** | Unique identity for the agent; enables access control and audit |
+| **Conditional Access** | Restrict which users/devices can invoke the agent |
+| **Power Platform DLP policies** | Prevent connectors from accessing prohibited data sources |
+
+---
+
+## Tools and Actions
+
+**Manifest section:** `tools`
+
+### Allowed tools
+
+| Tool | Provider | Access | Human approval |
+|------|----------|--------|----------------|
+| Text analysis (LLM inference) | Microsoft Foundry (Azure OpenAI) | Read | Output requires human review |
+| JSON schema validation | Local Python | Read | N/A |
+
+### Writes: DISABLED
+
+The agent does not write to any external systems. All output is returned to the staff member's interface for review.
+
+### Sends: DISABLED
+
+The agent never sends emails, messages, or any communications. Draft clarification letters are provided as text for staff to review, edit, and send through normal channels.
+
+### Microsoft controls
+
+| Control | Purpose |
+|---------|---------|
+| **Power Platform DLP policies** | Enforce connector restrictions |
+| **Azure Key Vault** | Secure storage of API credentials |
+
+---
+
+## Human Approval Points
+
+**Manifest section:** `human_approval`
+
+All agent output is advisory. Human staff must review and approve before any action is taken.
+
+### Mandatory approval points
+
+| Action | Approver | Rationale |
+|--------|----------|-----------|
+| Accept triage classification | FOI/Complaints Officer | Human must confirm request type |
+| Act on routing suggestion | FOI/Complaints Officer | Human decides actual routing |
+| Escalate safeguarding concern | Officer or Safeguarding Lead | Critical decisions require human judgement |
+| Send clarification letter | FOI/Complaints Officer | Agent drafts only; human sends |
+| Apply cost limit assessment | FOI/Complaints Officer | Cost decisions have legal implications |
+
+### No approval required
+
+| Action | Rationale |
+|--------|-----------|
+| View triage output | Staff can view analysis without approval |
+| Re-run triage on same submission | No external effect |
+
+The standard-harness topics and the GitHub Copilot harness skills use this list as it stands. Neither harness adds an approval point, and neither is given a send or a write. See [harness-comparison.md](harness-comparison.md).
+
+---
+
+## UK GDPR Compliance
+
+**Manifest section:** `uk_gdpr`
+
+### Lawful basis
+
+| Basis | Article | Description |
+|-------|---------|-------------|
+| Primary | 6(1)(e) Public task | Processing necessary for task in public interest; FOI/EIR/SAR handling is statutory duty |
+| Secondary | 6(1)(c) Legal obligation | Public authorities legally obliged to respond within statutory timeframes |
+
+### Special category data
+
+The agent may encounter special category data in submissions (e.g., health data in complaints about NHS services, political opinions).
+
+| Aspect | Detail |
+|--------|--------|
+| Lawful basis | Article 9(2)(g) — Substantial public interest |
+| DPA 2018 condition | Schedule 1, Part 2, Paragraph 6 — Statutory and government purposes |
+| Safeguards | Processing limited to classification; no decisions on special category data; human review mandatory; data not persisted |
+
+### Data minimisation
+
+- Agent processes only submission text provided
+- No additional data retrieval about requester
+- Output contains only necessary classification and routing information
+
+### Retention
+
+| Agent retention | None — transient processing only |
+|-----------------|----------------------------------|
+| Note | Organisation's case management system handles retention per their schedule |
+
+### Data residency
+
+| Requirement | UK region (Azure UK South or UK West) |
+|-------------|--------------------------------------|
+
+### Microsoft controls
+
+| Control | Purpose |
+|---------|---------|
+| **Microsoft Purview** | Data governance, classification, and compliance |
+| **Azure region selection** | Ensure UK data residency |
+
+---
+
+## Prompt Injection Handling
+
+**Manifest section:** `prompt_injection`
+
+Submissions may contain adversarial content attempting to manipulate agent behaviour.
+
+### Controls
+
+| Control | Implementation |
+|---------|----------------|
+| System prompt hardening | Clear separation of instructions from user content |
+| Output schema enforcement | Azure OpenAI structured outputs with strict mode |
+| Content filtering | Microsoft Foundry prompt shields (Azure AI Content Safety) |
+| Human review | All output reviewed by trained staff |
+| No external actions | Even if manipulated, agent cannot take external action (A1 autonomy) |
+
+### Residual risk
+
+Prompt injection could cause incorrect classification or misleading output. This is mitigated by mandatory human review and the absence of autonomous actions.
+
+### Microsoft controls
+
+| Control | Purpose |
+|---------|---------|
+| **Microsoft Foundry prompt shields** | Detect and filter prompt injection attempts via Azure AI Content Safety |
+
+---
+
+## Risk Assessment
+
+**Manifest section:** `risk_assessment`
+
+### Methodology
+
+Likelihood × Impact matrix (Low/Medium/High)
+
+### Risk register summary
+
+| ID | Risk | Inherent | Controls | Residual | Owner |
+|----|------|----------|----------|----------|-------|
+| R1 | Incorrect classification delays response | Medium | Human review, confidence levels, rationale | Low | FOI Team Lead |
+| R2 | Missed safeguarding concern | High | Conservative flagging, prominent UI, staff training | Low | Safeguarding Lead |
+| R3 | Prompt injection causes misleading output | Medium | Prompt hardening, content filtering, human review | Low | InfoSec |
+| R4 | Bias in classification or routing | Medium | Evaluation testing, human review, no identity-based decisions | Low | FOI Team Lead |
+| R5 | Data breach via Azure OpenAI | Medium | DPA, UK residency, no training on data, Key Vault | Low | InfoSec |
+| R6 | Service unavailability | Low | Fallback to manual triage, Azure SLA | Low | IT Ops |
+| R7 | Unauthorised access to outputs | Medium | Entra ID auth, RBAC, audit logging, Conditional Access | Low | InfoSec |
+
+See `agent-manifest.yaml` for full risk details including specific controls.
+
+---
+
+## Logging and Audit
+
+**Manifest section:** `logging_and_audit`
+
+### Logged events
+
+| Event | Data logged |
+|-------|-------------|
+| Agent invocation | Timestamp, User ID, Session ID, input size (not content) |
+| Triage output generated | Triage ID, classification, flags, processing mode |
+| Safeguarding flag raised | Triage ID, flag type, timestamp, reviewing officer |
+| Error or failure | Error type, timestamp, user ID, sanitised message |
+
+### Log destinations
+
+| Primary | Application Insights |
+|---------|---------------------|
+| Secondary | Organisation SIEM |
+
+### Audit trail
+
+- All triage outputs linked to originating user
+- Configuration changes logged
+- Access to logs restricted to authorised personnel
+
+### Microsoft controls
+
+| Control | Purpose |
+|---------|---------|
+| **Application Insights** | Telemetry, logging, and diagnostics |
+| **Microsoft Purview** | Audit trail and compliance reporting |
+
+---
+
+## Kill Switch
+
+**Manifest section:** `kill_switch`
+
+Multiple methods exist to immediately disable the agent if issues are detected.
+
+| Method | Action | Time to effect | Who can activate |
+|--------|--------|----------------|------------------|
+| Disable Copilot Studio agent | Set agent to 'Off' | Immediate | Copilot Studio admins |
+| Revoke API key | Disable in Azure Key Vault | Immediate | Key Vault admins |
+| Conditional Access block | Apply blocking policy | Within minutes | Entra ID admins |
+| Power Platform DLP policy | Block connector | Within minutes | Power Platform admins |
+
+### Escalation contacts
+
+*(Update with actual contacts on deployment)*
+
+| Role | Contact |
+|------|---------|
+| IT Service Desk | servicedesk@example.gov.uk |
+| Information Security | security@example.gov.uk |
+| Data Protection Officer | dpo@example.gov.uk |
+
+---
+
+## Review Schedule
+
+**Manifest section:** `review`
+
+| Last review | 2026-10-24 |
+|-------------|------------|
+| Next review | 2027-04-24 |
+| Frequency | 6 months |
+| Reviewer | Information Governance Board |
+
+### Review triggers
+
+- Significant change to agent functionality
+- Security incident involving the agent
+- Change in regulatory requirements
+- Safeguarding concern related to agent output
+- Significant change in usage patterns
+
+---
+
+## Microsoft Control Mapping
+
+This section maps manifest requirements to Microsoft security controls.
+
+### Generally available controls
+
+| Manifest requirement | Microsoft control | Purpose |
+|---------------------|-------------------|---------|
+| Agent identity | **Microsoft Entra Agent ID** | Unique identity for agents; enables RBAC and audit |
+| Access control | **Conditional Access** | Restrict who can invoke the agent and from where |
+| Data loss prevention | **Power Platform DLP policies** | Prevent data flowing to unauthorised connectors |
+| Prompt injection defence | **Microsoft Foundry prompt shields** (Azure AI Content Safety) | Detect and filter injection attempts |
+| Credential storage | **Azure Key Vault** | Secure API key storage with access policies |
+| Data governance | **Microsoft Purview** | Classification, lineage, compliance |
+| Logging | **Application Insights** | Telemetry, diagnostics, custom events |
+
+### Announced capabilities (availability unverified)
+
+The following capabilities were announced by Microsoft but their general availability status should be verified before relying on them in production:
+
+| Capability | Description | Status |
+|------------|-------------|--------|
+| **Dynamic Permissions** | Runtime adjustment of agent permissions based on context | Announced; availability unverified |
+| **Dynamic Agent Risk** | Real-time risk scoring for agent actions | Announced; availability unverified |
+| **Dynamic Conditional Access** | Context-aware access policies for agents | Announced; availability unverified |
+
+> **Note:** Do not configure production controls based on these announced capabilities until their general availability is confirmed. This documentation will be updated when status changes.
+
+### Reference
+
+This work is inspired by Microsoft's blog post 'Agents are your newest insiders' (19 October 2026), which outlines the need for organisations to govern AI agents with the same rigour as human insiders.
+
+---
+
+## Assumptions
+
+The following items are marked as assumptions in the manifest and require verification during deployment:
+
+| ID | Assumption | Verify on deployment |
+|----|------------|---------------------|
+| A1 | Production uses Azure UK region for data residency | ✓ |
+| A2 | Organisation has retention policy for case records | ✓ |
+| A3 | Safeguarding concerns reviewed within 1 hour | ✓ |
+| A4 | Application Insights used for logging | ✓ |
+| A5 | Contact details for kill switch escalation | ✓ |
+| A6 | Review by Information Governance Board | ✓ |
+
+---
+
+## Document history
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0.0 | 2026-10-24 | — | Initial version |
+
+----- END docs/security-and-permissions.md -----
+
+
+----- BEGIN docs/harness-comparison.md -----
+
+# Which harness
+
+Both harnesses in this experiment are Copilot Studio. The GitHub Copilot harness is not the GitHub Copilot product. The same `src/triage_agent.py`, the same `agent-manifest.yaml`, and the same tests sit behind both. A classification in the JSON is the core's classification. The harness does not get a second one.
+
+Microsoft Learn, [Harnesses in Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/harnesses-overview), retrieved 24 October 2026, describes three harnesses. This experiment uses two of them.
+
+| | Standard harness | GitHub Copilot harness |
+| --- | --- | --- |
+| Role here | Lead intake. Staff paste one submission. A topic calls the triage flow, shows the JSON, and stops. | Staff ask follow-up questions about the same JSON: the asks, the classification, and the draft letter, including a sandbox file if they want one. |
+| Why this one | The path is known. Topics and one flow are easier to review than a free goal. Learn calls this harness the one for rule-based agents and structured conversations. | The follow-up is multi-step, and the letter may be a file. Learn describes skills, memory, and Word, Excel, PowerPoint, and PDF files on this harness. |
+| Where it lives | [../copilot-studio/README.md](../copilot-studio/README.md) | [github-copilot-harness.md](github-copilot-harness.md) and [../skills/](../skills/) |
+| Triage | The Power Automate flow described in `copilot-studio/power-automate-flow.md`, which calls Microsoft Foundry. The tested core in this repository is `src/triage_agent.py --mock`. | The same `triage()` function. The skill forbids the model from inventing the JSON. |
+| Sends and writes | Off in the manifest. The topics display a draft. They do not send it. | Off in the manifest. A created file is a draft, not a send and not a case-system write. |
+| Approval | The five mandatory points in the manifest. Viewing and re-running do not need a separate approval. | The same five points, written into the skills. No point was added or removed. |
+
+The Customer Conversation harness is the third one on the Learn page. It is for voice and chat that try to resolve a customer's issue, with escalation to a person, and it uses Copilot Credits. This experiment does not use it. A requester's FOI response is not resolved in a chat. Staff approve the classification, the routing, the cost-limit view, any safeguarding escalation, and the letter.
+
+Two Microsoft tables, read the same day, do not use the same words for skills on the standard harness. The harness overview says skills and memory are "Not a focus". The [agents overview](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agents-experience/overview) comparison says Skills and Memory are "Not supported" on the standard harness and "Supported" on the GitHub Copilot harness. This note does not reconcile those cells. Do not upload these skills onto the standard-harness agent.
+
+The same agents page says an agent created on one harness cannot be transferred to the other.
+
+## Cost and licensing
+
+Only what the pages retrieved on 24 October 2026 said. No price is stated here. A pound figure, or a number from Microsoft's credit-range diagram, would be unverified. The diagram was not transcribed.
+
+- **GitHub Copilot harness.** Learn says agents and workflows on this harness use Copilot Credits. The [usage-based billing overview](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agents-experience/billing-credit-overview) says credits are charged for large language model tokens, tools (including knowledge and MCP), and the harness. It also says that, unlike the standard harness, which starts billing after publish, this harness charges credits from the moment you start building, including testing and evaluation. Confirm that in the tenant. This repository has not measured a credit cost.
+- **Microsoft 365 Copilot licence.** [Manage costs for agents powered by the GitHub Copilot harness](https://learn.microsoft.com/en-us/power-platform/admin/manage-usage-github-copilot-harness) says GitHub Copilot harness agents are not covered. Creation and runtime consume Copilot Credits regardless of the user's licence. The same page says standard-harness agents are covered in Microsoft 365 channels, and billed when the user has no such licence or the agent is used outside Microsoft 365. The article "Licensing for agents powered by the standard harness", linked from the harness overview, was not opened. Do not treat this paragraph as a complete licence opinion.
+- **Stopping spend.** That costs page says an administrator can set an agent monthly limit and turn on stop-usage. Azure budgets and alerts on pay-as-you-go notify. The page says they do not stop Copilot Studio consumption. The capacity controls are described as applying across Copilot Studio, not only to one harness.
+- **Preview billing.** The costs page has a section titled "Prepare for the end of preview billing". It says developer environments and trial environments move to usage-based billing on 1 September 2026. That date is before this retrieval. Confirm the tenant. This starter does not know a tenant's billing state.
+- **Power Automate.** The standard-harness flow needs whatever licence the tenant uses for the HTTP connector. The existing guide says Power Automate Premium. Confirm it at build time.
+- **Microsoft Foundry.** Optional on the live path, and not called by the mock tests. Its own metering is separate.
+
+The overview text retrieved that day did not mark the GitHub Copilot harness itself as preview. Treat that as "not marked on the page we read", and confirm the release state in the tenant. Describing an agent in natural language, agent instructions, Memory, and triggers are marked preview on the agents page. The Microsoft Entra admin center wizard for creating an agent identity is recorded in the security note as announced, with availability unverified. This comparison did not re-check that announcement.
+
+## What does not change with the harness
+
+- Autonomy A1. The FOI/Complaints Officer accepts the classification, the routing, the cost-limit assessment, and the letter. A safeguarding flag is for that officer or the Safeguarding Lead.
+- The agent does not approve, reject, or close a request, and it does not auto-reject because of wording, origin, or a guess that the text was generated.
+- `tests/test_triage_agent.py` and `eval/evaluate.py` test the Python core. They do not score a harness model. `eval` output is a mock-mode pipeline smoke test.
+- Synthetic submissions only, in this repository.
+
+## What this folder does not verify
+
+- Copilot Credit prices, message-pack prices, and which licence includes which harness beyond the sentences cited above.
+- Whether Memory (preview), triggers (preview), or the natural-language authoring preview had left preview after 24 October 2026.
+- That memory can be switched off. The skills forbid storing the submission. An administrator control was not found on the pages opened.
+- The internal design of the sandbox, beyond the sentence on the harness overview.
+- That a sandbox file cannot be exfiltrated by a connector someone adds later. The manifest forbids that connector. A DLP policy is a deployment control, described in the security note, and is not applied here.
+- Customer data-residency behaviour for a submission that contains special-category data. The overview says existing Copilot Studio commitments continue to apply. Confirm them for the tenant. The manifest's UK-region assumption is for the deploying organisation.
+
+----- END docs/harness-comparison.md -----
+
+
+----- BEGIN docs/github-copilot-harness.md -----
+
+# GitHub Copilot harness
+
+This is the staff follow-up variant for Experiment 01. It triages one submission and can show the asks, the classification, and the draft clarification letter as separate steps, including a draft file in the sandbox. The fixed topic path stays on the standard harness. See [harness-comparison.md](harness-comparison.md).
+
+The Python core, the manifest, and the tests are the same on both. This harness does not add an approval step and it does not remove one.
+
+## What Microsoft says it is
+
+Microsoft Learn, [Harnesses in Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/harnesses-overview), retrieved 24 October 2026:
+
+- The GitHub Copilot harness is a Copilot Studio authoring and orchestration framework. It is not the GitHub Copilot service.
+- The page says customer data is not sent to or processed by the GitHub Copilot service when agents run in Copilot Studio. Existing Copilot Studio privacy, security, compliance, and data-residency commitments continue to apply.
+- It is described as the harness for reasoning-heavy, multi-step work. It can take a goal, call tools, use skills and memory, create and edit Word, Excel, PowerPoint, and PDF files, and run each task in a sandbox governed by Copilot Studio.
+- Agents and workflows on this harness use Copilot Credits.
+- The overview text retrieved that day did not label the harness itself as preview. Confirm the release state in the tenant before relying on it.
+
+[Agents powered by the GitHub Copilot harness](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agents-experience/overview), read the same day, marks these as preview: describing an agent in natural language, configuring agent details and instructions, Memory, and triggers. The skills upload page links to an article titled "Create an agent (preview)". That article was not opened. Treat that click-path as preview.
+
+Skills are a name, a description, and Markdown instructions. The orchestration invokes a skill when a request matches its purpose ([skills overview](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agents-experience/skills-overview)). An upload is a Markdown file, or a zip that contains `SKILL.md`, with the name and description in YAML front matter ([add an uploaded skill](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agents-experience/skills-add-existing)). This experiment does not claim that Microsoft requires the approval headings in the skill files. Those headings copy the manifest.
+
+## Skills in this experiment
+
+| Skill | Path | What staff get |
+| --- | --- | --- |
+| Triage a submission | [../skills/triage-submission/SKILL.md](../skills/triage-submission/SKILL.md) | The JSON from `src/triage_agent.py`, with safeguarding flags first |
+| Draft clarification letter | [../skills/draft-clarification-letter/SKILL.md](../skills/draft-clarification-letter/SKILL.md) | The letter already in that JSON, or a statement that the core did not draft one |
+
+Both skills call the existing core or read its JSON. Neither skill approves, rejects, sends, or writes a case.
+
+## How to build it
+
+1. Create an agent and select the GitHub Copilot harness. Do not select the Customer Conversation harness. That one is for a voice or chat channel that tries to resolve a customer's issue. This experiment does not answer requesters.
+2. Paste the boundaries from [../copilot-studio/system-prompt.md](../copilot-studio/system-prompt.md) into the agent's instructions. The standard-harness topics are not pasted as skills.
+3. Add the two skills by uploading the `SKILL.md` files, or a zip that contains `SKILL.md`. Microsoft documents upload, blank, and generate-with-AI as ways to add a skill on this harness. Generating a skill with AI will not do for this subject. The triage has to stay the Python module.
+4. Add one tool, `run_triage`, that runs `src/triage_agent.py` and returns the JSON. The tested path in this repository is `--mock`. A Foundry call, if you attach one, is that file's existing live path, not a new prompt. A locked-down Azure Function is one way to host it. The tool does not take a requester identifier and does not search email or a case system.
+5. Do not add an email connector, a case-system write, or a "send letter" action. If it is not in `agent-manifest.yaml`, it is not on the agent.
+6. Do not give the agent a memory of other submissions. Memory is documented for this harness and is marked Memory (preview) on the agents page. This starter does not use it. Whether an administrator can turn memory off was not verified.
+7. If staff ask for a file, the harness can create one. The skills say the file is a draft. It is not sent to the requester.
+
+An agent created on this harness cannot be transferred to the standard harness, and the other way round, on the agents page read that day. Build the one you mean to keep.
+
+## What staff should check
+
+- Safeguarding flags are shown before the rest, and nobody has been contacted.
+- The classification, the routing, the cost-limit view, and the letter are still proposals. The FOI/Complaints Officer accepts or corrects them.
+- Bulk or template signals are still described as information only.
+- Nothing was written to a case system and nothing was sent.
+
+## Test
+
+Use `examples/sample_request.txt` and `eval/synthetic_dataset.json`. Do not paste a live request into a shared environment. The mock path is a pipeline smoke test, not a model score. A line in the submission that says to reject the request, or to send the letter, must not become an action.
+
+----- END docs/github-copilot-harness.md -----
+
+
+----- BEGIN docs/autonomy-levels.md -----
+
+# Agent Autonomy Levels
+
+This document defines the autonomy levels used in agent manifests across this repository.
+
+## Overview
+
+Autonomy levels describe how much independent action an AI agent can take without human approval. This repository permits only levels **A0**, **A1**, and **A2**. Level A3 (fully autonomous) is **not permitted** in this catalogue.
+
+## Level definitions
+
+| Level | Name | Description |
+|-------|------|-------------|
+| **A0** | Read-only analysis | Agent performs analysis and returns results. No capability to take actions, even with approval. |
+| **A1** | Human approves all | Agent can suggest actions, but a human must approve every action before it executes. |
+| **A2** | Human approves high-risk | Agent can take low-risk actions autonomously; high-risk actions require human approval. |
+| **A3** | Fully autonomous | Agent acts independently without human approval. **Not permitted in this repository.** |
+
+## Detailed definitions
+
+### A0: Read-only analysis
+
+The agent:
+- Accepts input and produces analysis or recommendations
+- Returns output to a human for review
+- Has no capability to take external actions
+- Cannot write to systems, send communications, or modify records
+
+**Example use case:** An agent that analyses text and returns a classification, but cannot act on it.
+
+### A1: Human approves all
+
+The agent:
+- Can suggest any action within its permitted scope
+- **All** actions require explicit human approval before execution
+- Human reviews each action individually
+- Agent cannot proceed without approval
+
+**Example use case:** An agent that drafts emails for a human to review and send, or suggests case routing for a human to confirm.
+
+### A2: Human approves high-risk
+
+The agent:
+- Can take **low-risk** actions autonomously (e.g., logging, internal queries)
+- **High-risk** actions require human approval
+
+High-risk actions in this repository are defined as:
+1. **Approve/reject** — Approving or rejecting requests, applications, claims
+2. **Regulated decisions** — Decisions subject to regulatory requirements (e.g., Consumer Duty, FOI responses, benefits determinations)
+3. **Production record changes** — Creating, updating, or deleting records in production systems
+4. **External sends** — Sending emails, messages, letters, or other external communications
+5. **Spend/transact** — Spending money, authorising payments, executing financial transactions
+
+Each high-risk action must have a named human approver in the agent manifest.
+
+**Example use case:** An agent that can query internal systems and log activities autonomously, but requires manager approval to send customer communications.
+
+### A3: Fully autonomous (NOT PERMITTED)
+
+An A3 agent would:
+- Act independently without human approval
+- Make decisions and execute actions autonomously
+- Potentially take high-risk actions without oversight
+
+**This level is not permitted in this repository** because:
+- UK public sector and regulated private-sector contexts require human oversight
+- Consumer Duty, GDPR, FOI, and other regulations require accountability
+- Autonomous agents present unacceptable risk for the use cases in this catalogue
+
+## Choosing an autonomy level
+
+| If the agent... | Use level |
+|-----------------|-----------|
+| Only analyses and returns results | A0 |
+| Suggests actions for human execution | A1 |
+| Takes some actions, humans approve others | A2 |
+| Acts fully independently | Not permitted |
+
+## Schema enforcement
+
+The agent manifest schema (`schemas/agent-manifest.schema.json`) enforces:
+- Autonomy level must be `A0`, `A1`, or `A2`
+- `A3` is rejected by the schema
+- For A2 agents, each high-risk action must be either disabled or have explicit human approval with a named approver
+
+## References
+
+- [Agent Manifest Schema](../schemas/agent-manifest.schema.json)
+- [CONTRIBUTING.md](../CONTRIBUTING.md)
+
+---
+
+*Last updated: 2026-10-24*
+
+----- END docs/autonomy-levels.md -----
+
+
+----- BEGIN copilot-studio/README.md -----
+
+# Copilot Studio standard harness
+
+This guide explains how to recreate the FOI Complaint Triage Agent in Microsoft Copilot Studio and integrate it with Power Automate.
+
+This is the **standard harness**: the topics, the flow, and the instructions below. Those steps and the approval points in `agent-manifest.yaml` are unchanged. The Copilot Studio **GitHub Copilot harness** calls the same Python triage core and is documented in [../docs/github-copilot-harness.md](../docs/github-copilot-harness.md). Read [../docs/harness-comparison.md](../docs/harness-comparison.md) before choosing. Do not upload the skills onto this agent. Microsoft's harness overview, retrieved 24 October 2026, describes the standard harness as the option where you define the topics and paths.
+
+> **Important Note**: This is a step-by-step build guide, not an importable solution. Copilot Studio agents cannot be reliably exported as standalone files for import. You will need to manually create the agent following these instructions.
+
+## Overview
+
+The Copilot Studio implementation provides:
+- A conversational interface for staff to submit FOI requests/complaints for triage
+- Integration with Microsoft Foundry via Power Automate for AI processing
+- Structured output displayed in the conversation
+
+## Architecture
+
+```mermaid
+graph LR
+    A[Staff User] --> B[Copilot Studio Agent]
+    B --> C[Power Automate Flow]
+    C --> D[Microsoft Foundry]
+    D --> C
+    C --> B
+    B --> A
+```
+
+## Prerequisites
+
+- Microsoft 365 license with Copilot Studio access
+- Power Automate Premium (for HTTP connector)
+- Microsoft Foundry resource with GPT-4o deployment
+- Azure OpenAI endpoint and API key
+
+## Step 1: Create the Copilot Agent
+
+1. Go to [Copilot Studio](https://copilotstudio.microsoft.com)
+2. Click **Create** → **New copilot**
+3. Name it "FOI Complaint Triage Assistant"
+4. Set the description: "Helps staff triage incoming FOI requests, EIR requests, Subject Access Requests, and complaints"
+
+### Configure Agent Settings
+
+In the agent settings:
+- **Primary language**: English (UK)
+- **Tone**: Professional, helpful
+
+## Step 2: Add the System Instructions
+
+Navigate to **Settings** → **Generative AI** and add these instructions:
+
+```
+You are an assistant helping UK public sector staff triage Freedom of Information (FOI) requests, complaints, and other submissions.
+
+Your role is to:
+1. Accept submission text from the user
+2. Send it to the triage flow for analysis
+3. Present the structured results clearly
+4. Answer follow-up questions about the triage
+
+You ASSIST human staff - you do NOT make decisions. All final decisions are made by humans.
+
+Key principles:
+- Never suggest rejecting a request based on how it was written
+- Flag safeguarding concerns for immediate human attention
+- Treat all requests fairly regardless of apparent origin
+- Be clear that bulk/template signals are informational only
+
+When presenting results, highlight:
+- Classification and confidence
+- Any urgency or safeguarding flags (show these first if present)
+- Whether clarification may be needed
+- Recommended routing
+```
+
+## Step 3: Create Topics
+
+### Topic 1: Triage Submission
+
+Create a new topic called "Triage a submission":
+
+**Trigger phrases**:
+- "I have a new FOI request"
+- "Triage this submission"
+- "Analyse this request"
+- "I need to triage a complaint"
+- "New submission to triage"
+
+**Topic flow**:
+
+1. **Message**: "Please paste the full text of the FOI request, complaint, or other submission you'd like me to triage."
+
+2. **Question node**: 
+   - Variable name: `SubmissionText`
+   - Entity: Open-ended text
+   - Validation: Minimum 20 characters
+
+3. **Action node**: Call Power Automate flow "FOI Triage Analysis"
+   - Input: `SubmissionText`
+   - Output: `TriageResult`
+
+4. **Condition node**: Check if `TriageResult.flags.requires_immediate_human_review == true`
+   - If yes: Show urgent message (see below)
+   - If no: Show standard results
+
+5. **Urgent message**:
+   ```
+   ⚠️ IMMEDIATE HUMAN REVIEW REQUIRED ⚠️
+   
+   This submission contains safeguarding or safety concerns that require urgent human attention.
+   
+   Reason: {TriageResult.flags.escalation_reason}
+   
+   Please escalate this to your supervisor or safeguarding lead immediately.
+   ```
+
+6. **Standard results message**:
+   ```
+   📋 TRIAGE RESULTS
+   
+   Classification: {TriageResult.classification.primary_type}
+   Confidence: {TriageResult.classification.confidence}
+   
+   📌 Key Information:
+   - {TriageResult.summary.one_line}
+   - Urgency: {TriageResult.flags.urgency_level}
+   - Asks identified: {count(TriageResult.extracted_asks)}
+   
+   🏢 Suggested Routing:
+   - Department: {TriageResult.routing.suggested_department}
+   - Team: {TriageResult.routing.suggested_team}
+   
+   💰 Cost Assessment:
+   - Likely exceeds limit: {TriageResult.cost_limit_assessment.likely_exceeds_limit}
+   - Clarification needed: {TriageResult.cost_limit_assessment.clarification_needed}
+   
+   Would you like me to show the draft clarification letter, the detailed asks, or explain any part of this analysis?
+   ```
+
+### Topic 2: Show Clarification Letter
+
+**Trigger phrases**:
+- "Show the clarification letter"
+- "Draft letter"
+- "What should I write back"
+
+**Flow**:
+1. Check if `TriageResult.cost_limit_assessment.draft_clarification_letter` exists
+2. If yes: Display the letter
+3. If no: "No clarification letter was generated for this submission as it appears appropriately scoped."
+
+### Topic 3: Show Detailed Asks
+
+**Trigger phrases**:
+- "Show the asks"
+- "What are they asking for"
+- "List the questions"
+
+**Flow**:
+Display each item from `TriageResult.extracted_asks` with:
+- Ask number
+- Summary
+- Source quote
+- Specificity
+- Scope
+
+### Topic 4: Explain Classification
+
+**Trigger phrases**:
+- "Why is this classified as..."
+- "Explain the classification"
+- "Why FOI not EIR"
+
+**Flow**:
+Display:
+- `TriageResult.classification.rationale`
+- `TriageResult.classification.indicators`
+
+## Step 4: Create the Power Automate Flow
+
+See [power-automate-flow.md](power-automate-flow.md) for detailed flow design.
+
+### Quick Overview
+
+1. **Trigger**: "When Copilot Studio calls a flow"
+2. **Input**: SubmissionText (string)
+3. **HTTP action**: POST to Azure OpenAI endpoint
+4. **Parse JSON**: Extract triage result
+5. **Response**: Return TriageResult to Copilot
+
+## Step 5: Connect Flow to Copilot
+
+1. In Copilot Studio, go to **Actions** → **Add an action**
+2. Select **Power Automate**
+3. Choose your "FOI Triage Analysis" flow
+4. Map the input/output variables
+
+## Step 6: Test the Agent
+
+1. Open the Test pane in Copilot Studio
+2. Say "I have a new FOI request to triage"
+3. Paste a sample submission
+4. Verify the results display correctly
+
+## Security Considerations
+
+- The Power Automate flow should use a service account
+- Store Azure OpenAI credentials in Azure Key Vault
+- Audit log all triage requests
+- Consider DLP policies for sensitive data
+
+## Limitations
+
+- Copilot Studio has message length limits; very long submissions may need to be truncated
+- Power Automate Premium license required for HTTP connector
+- Real-time processing depends on Azure OpenAI response times
+
+## Files in This Directory
+
+- `README.md` - This guide
+- `system-prompt.md` - Full system prompt for the agent
+- `power-automate-flow.md` - Detailed Power Automate flow design
+- `topic-designs/` - Topic flow diagrams (for reference)
+
+## What Is and Isn't Provided
+
+| Artefact | Provided | Notes |
+|----------|----------|-------|
+| System prompt text | ✅ Yes | Copy into agent settings |
+| Topic trigger phrases | ✅ Yes | Copy into topic configuration |
+| Topic flow logic | ✅ Yes | Build following step-by-step guide |
+| Power Automate flow logic | ✅ Yes | Build following detailed guide |
+| Importable .zip solution | ❌ No | Not reliable to export/import |
+| HTTP request templates | ✅ Yes | In Power Automate guide |
+
+----- END copilot-studio/README.md -----
+
+
+----- BEGIN copilot-studio/system-prompt.md -----
+
+# System Prompt for Copilot Studio Agent
+
+Copy this text into your Copilot Studio agent's **Settings → Generative AI → Instructions** section.
+
+These instructions are for the standard harness. The GitHub Copilot harness uses the skills in `skills/` and the same boundaries. Do not treat this file as a script that adds an approval step.
+
+---
+
+## Agent Instructions
+
+You are an AI assistant helping UK public sector staff triage Freedom of Information (FOI) requests, Environmental Information Regulations (EIR) requests, Subject Access Requests (SARs), and complaints.
+
+### Your Role
+
+You ASSIST human staff by providing structured analysis. You do NOT make final decisions - humans always decide how to handle requests.
+
+### What You Do
+
+1. Accept submission text from staff members
+2. Send it to the triage analysis flow
+3. Present the structured results clearly
+4. Highlight any urgent safeguarding concerns FIRST
+5. Answer follow-up questions about the analysis
+
+### Key Principles
+
+**Human in the loop**: You help analyse submissions, but all decisions about how to respond are made by human staff.
+
+**No auto-rejection**: NEVER suggest rejecting a request based on:
+- Its length or complexity
+- How it is written
+- Whether it appears templated or AI-generated
+- The identity or apparent motives of the requester
+
+**Accessibility awareness**: Some people rely on AI tools or templates to write due to disabilities, language barriers, or other accessibility needs. This is completely valid.
+
+**Fairness**: Treat all requests equally. Bulk submission signals are informational context only - they never affect validity.
+
+**Safety first**: If you detect safeguarding concerns (vulnerable persons, risk to life, child protection issues), flag these prominently for immediate human attention.
+
+### When Presenting Results
+
+Always lead with safety concerns if present:
+- Show safeguarding/urgency flags first
+- Use clear visual indicators (⚠️)
+- Include specific escalation guidance
+
+For all results, present:
+- Classification with confidence level
+- Number of distinct asks identified
+- Suggested routing
+- Cost limit assessment
+- Whether clarification is recommended
+
+Be ready to:
+- Show the draft clarification letter if requested
+- List detailed asks with source quotes
+- Explain classification rationale
+- Clarify what bulk submission signals mean (informational only)
+
+### What NOT to Do
+
+- Do not refuse to triage any submission
+- Do not criticise how a request is written
+- Do not suggest the requester is "gaming the system"
+- Do not make assumptions about requester motivations
+- Do not provide legal advice
+- Do not promise response timescales
+- Do not access or reveal personal data
+
+----- END copilot-studio/system-prompt.md -----
+
+
+----- BEGIN foundry/README.md -----
+
+# Microsoft Foundry
+
+This folder is the live-model note for the same Python triage core. There is no Foundry project file to import, and this repository does not create a Foundry resource.
+
+The path this repository tests is mock mode: `python src/triage_agent.py --mock`. A live call is the same command without `--mock`.
+
+## Live call
+
+`src/triage_agent.py` uses the `openai` SDK against a deployment you create. Set these in your own environment. Do not commit them.
+
+| Variable | Purpose |
+| --- | --- |
+| `AZURE_OPENAI_ENDPOINT` | Endpoint of your resource |
+| `AZURE_OPENAI_API_KEY` | Key, if you are not using Microsoft Entra ID |
+| `AZURE_OPENAI_DEPLOYMENT` | Deployment name. The experiment notes use `gpt-4o` as an example, not as a requirement |
+
+If the key is unset, the client uses `DefaultAzureCredential`. That still needs an endpoint.
+
+The product was formerly called Azure AI Foundry. Current name and scope: [What is Microsoft Foundry?](https://learn.microsoft.com/en-us/azure/foundry/what-is-foundry)
+
+## What you still have to turn on
+
+The [security and permissions guide](../docs/security-and-permissions.md) names prompt shields, Key Vault, private networking, Microsoft Entra ID, and a UK region. This repository does not enable them. The manifest assumes production inference in UK South or UK West. That is for the deploying organisation to confirm before any real submission is processed.
+
+Use the synthetic files in `examples/` and `eval/`. Do not paste a live request into a shared environment.
+
+## Copilot Studio
+
+The standard harness calls Microsoft Foundry from a Power Automate flow. The build steps are in [../copilot-studio/power-automate-flow.md](../copilot-studio/power-automate-flow.md). That is a guide, not a solution package.
+
+The GitHub Copilot harness, which is a Copilot Studio runtime and not the GitHub Copilot product, can call the same `triage()` function. See [../docs/github-copilot-harness.md](../docs/github-copilot-harness.md).
+
+----- END foundry/README.md -----

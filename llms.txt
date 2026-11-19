@@ -1,0 +1,40 @@
+# FOI and Complaint Triage AI Agent for UK Public Sector
+
+> FOI and complaint triage for UK public sector staff on Copilot Studio and Microsoft Foundry. An officer approves every output. The agent never sends or rejects.
+
+Decision-support starter for UK public authorities. Autonomy A1. The agent reads one pasted submission and returns a structured brief. It does not decide, send, reject, or write to a case system. Sample data is synthetic. The permissions manifest wins if a document disagrees with it.
+
+This file follows the llms.txt layout: a title, a blockquote summary, then links. The long form is llms-full.txt.
+
+## Start here
+
+- [README](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/README.md): Buyer and engineer overview, statutory quotations, evaluation, and limitations
+- [Landing page](https://rahul-bachina.github.io/foi-complaint-triage-copilot-agent/): Short public page with the same summary
+- [Full text for models](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/llms-full.txt): README and key docs concatenated
+
+## Governance
+
+- [Permissions manifest](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/agent-manifest.yaml): Least privilege, approvals, UK GDPR basis, risks, kill switch
+- [Manifest schema](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/schemas/agent-manifest.schema.json): Draft-07 schema. Autonomy is A0, A1, or A2
+- [Security and permissions](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/docs/security-and-permissions.md): The manifest written for a DPO, information security, and governance readers
+- [Autonomy levels](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/docs/autonomy-levels.md): A0, A1, and A2. A3 is not permitted
+- [Security policy](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/SECURITY.md): How to report a vulnerability without posting personal data
+
+## Build notes
+
+- [Copilot Studio standard harness](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/copilot-studio/README.md): Build guide. Not an importable solution
+- [Microsoft Foundry](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/foundry/README.md): Live-model environment variables. No resource is created by this repository
+- [GitHub Copilot harness](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/docs/github-copilot-harness.md): Copilot Studio runtime for follow-up. Not the GitHub Copilot product
+- [Harness comparison](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/docs/harness-comparison.md): Which harness, and what was not verified about licensing
+- [Output schema](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/schema/triage_output.schema.json): JSON shape of the brief
+
+## Evaluation
+
+- [Evaluation script](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/eval/evaluate.py): Mock-mode pipeline smoke test
+- [Synthetic dataset](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/eval/synthetic_dataset.json): 12 fictional cases. Not a model benchmark
+- [Citation](https://github.com/rahul-bachina/foi-complaint-triage-copilot-agent/blob/main/CITATION.cff): Citation metadata
+
+## Catalogue
+
+- [Copilot Agent Experiments](https://github.com/rahul-bachina/copilot-agent-experiments): Hub repository this experiment is published from
+- [Catalogue site](https://rahul-bachina.github.io/copilot-agent-experiments/): The same catalogue as a documentation site
