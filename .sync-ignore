@@ -1,0 +1,19 @@
+# Files and directories this standalone repository owns.
+# scripts/sync_from_hub.py must not overwrite them when it copies
+# experiments/01-foi-complaint-triage/ from the public hub.
+# A trailing slash matches that directory and everything under it.
+# A line may use a shell-style glob (* and ?).
+
+README.md
+llms.txt
+llms-full.txt
+llms*.txt
+CITATION.cff
+SECURITY.md
+CONTRIBUTING.md
+.gitignore
+.sync-ignore
+.github/
+site/
+scripts/
+foundry/
